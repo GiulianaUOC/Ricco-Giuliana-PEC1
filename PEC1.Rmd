@@ -1,0 +1,195 @@
+---
+title: "Ricco-Giuliana-PEC1"
+author: "Giuliana Ricco"
+output: html_document
+---
+```{r Directorio}
+setwd("F:/UOC/2 cuatri/Análisis datos ómicos/PEC1")
+```
+
+```{r Librerias}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install(c("SummarizedExperiment", "readr", "tidyverse"))
+
+library(SummarizedExperiment)
+library(readr)
+library(tidyverse)
+
+if (!requireNamespace("readr", quietly = TRUE)) 
+    install.packages("readr")
+library(readr)
+
+if (!requireNamespace("pheatmap", quietly = TRUE)) 
+    install.packages("pheatmap")
+library(pheatmap)
+
+if (!requireNamespace("ggplot2", quietly = TRUE)) 
+    install.packages("ggplot2")
+library(ggplot2)
+
+if (!requireNamespace("tidyr", quietly = TRUE)) 
+    install.packages("tidyr")
+library(tidyr)
+
+if (!requireNamespace("svglite", quietly = TRUE)) 
+    install.packages("svglite")
+library(svglite)
+```
+
+```{r Datos}
+ruta <- "F:/UOC/2 cuatri/Análisis datos ómicos/PEC1/human_cachexia.csv" #cargar datos
+cachexia <- read_csv(ruta) #leer datos
+head(cachexia)
+```
+
+```{r SummarizedExperiment}
+cachexia <- as.data.frame(cachexia) #convertir en data frame
+assay_data <- as.matrix(cachexia[, -c(1, 2)])  #quitar patient ID y mucleloss
+
+col_data <- DataFrame(
+  SampleID = colnames(assay_data)  # definir columnas
+)
+
+row_data <- DataFrame(
+  Metabolite = cachexia[[1]]  # definir filas
+)
+
+se <- SummarizedExperiment( #crear objeto SummarizedExperiment 
+  assays = list(counts = assay_data), 
+  colData = col_data, 
+  rowData = row_data
+)
+
+se
+```
+
+```{r Ver SE}
+assay(se)  # ver la matriz de datos
+rowData(se)  # Ver metadatos de metabolitos
+colData(se)  # Ver metadatos de muestras
+```
+
+```{r Guardar SE}
+#guardar el objeto SummarizedExperiment 
+objeto_se <-"F:/UOC/2 cuatri/Análisis datos ómicos/PEC1/human_cachexia_SE.Rda"
+save(se, file = objeto_se)
+```
+
+```{r Cargar SE}
+#cargamos el objeto y visualizamos para comprobra que se ha creado bien
+load("F:/UOC/2 cuatri/Análisis datos ómicos/PEC1/human_cachexia_SE.Rda")
+se
+```
+
+```{r Resumen SE}
+#ver resumen de SE para hacernos una idea de los datos que manejamos
+summary(assay(se))
+```
+```{r Data Frame}
+#generar data frame de se y verificar columnas
+df <- as.data.frame(assay(se))
+colnames(df)
+```
+
+```{r Boxplot}
+#convertir a formato largo para usar con base r
+df_long <- df %>%
+  pivot_longer(cols = everything(), names_to = "Metabolite", values_to = "Value")
+
+#SVG
+svg("boxplot_distribucion_metabolitos_baseR.svg", width = 14, height = 10)  
+
+#boxplot
+boxplot(Value ~ Metabolite, data = df_long, 
+        main = "Distribución de los metabolitos",
+        xlab = "Metabolito", ylab = "Valor de la medición",
+        col = "skyblue", 
+        las = 2,  #angulo de etiquetas eje x
+        cex.axis = 0.8,  #fuente de ejes
+        cex.main = 1.2,  #tamaño titulo
+        cex.lab = 1.0)   #tamaño etiquetas eje
+
+dev.off()  #cierra SVG
+
+#ver el gráfico
+boxplot(Value ~ Metabolite, data = df_long, 
+        main = "Distribución de los metabolitos",
+        xlab = "Metabolito", ylab = "Valor de la medición",
+        col = "skyblue", 
+        las = 2,  
+        cex.axis = 0.6,  
+        cex.main = 1.2, 
+        cex.lab = 0.8)   
+
+```
+
+
+
+```{r Matriz de Correlación}
+#matriz de correlacion entre metabolitos
+cor_matrix <- cor(df, use = "complete.obs")  #eliminar valores nulos
+
+#SVG
+svg("matriz_correlacion_metabolitos.svg") 
+
+pheatmap(cor_matrix, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = colorRampPalette(c("blue", "white", "red"))(50), 
+         main = "Matriz de correlación entre metabolitos",
+         fontsize = 4,  #fuente
+         cellwidth = 4,   #ancho celda
+         cellheight = 4,  #alto celda
+         angle_col = 45,  #angulo columna 
+         angle_row = 0)   #angulo fila
+
+dev.off()  #cierra SVG
+
+#ver el gráfico
+pheatmap(cor_matrix, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = colorRampPalette(c("blue", "white", "red"))(50), 
+         main = "Matriz de correlación entre metabolitos",
+         fontsize = 3.4,  
+         cellwidth = 3.5, 
+         cellheight = 3.5, 
+         angle_col = 45, 
+         angle_row = 0)
+```
+
+```{r PCA}
+pca <- prcomp(df, center = TRUE, scale. = TRUE) 
+
+#SVG
+svg("pca_metabolitos.svg", width = 14, height = 10) 
+
+plot(pca$x[, 1:2], 
+     col = "orange", 
+     pch = 16, #tipo de marcador (circulos)
+     main = "Análisis de Componentes Principales (PCA)", 
+     xlab = paste("PC1 (", round(100 * summary(pca)$importance[2,1], 1), "%)", sep = ""),
+     ylab = paste("PC2 (", round(100 * summary(pca)$importance[2,2], 1), "%)", sep = ""),
+     cex.axis = 0.8, #tamaño fuente ejes
+     cex.main = 1.2, #tamaño titulo
+     cex.lab = 1.0)  #tamaño etiquetas eje
+
+dev.off()  
+
+#ver grafico
+plot(pca$x[, 1:2], 
+     col = "orange", 
+     pch = 16, 
+     main = "Análisis de Componentes Principales (PCA)", 
+     xlab = paste("PC1 (", round(100 * summary(pca)$importance[2,1], 1), "%)", sep = ""),
+     ylab = paste("PC2 (", round(100 * summary(pca)$importance[2,2], 1), "%)", sep = ""),
+     cex.axis = 0.8, 
+     cex.main = 1.2, 
+     cex.lab = 1.0)
+```
+
+
+
+
